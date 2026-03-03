@@ -9,8 +9,14 @@ const REQUIRED_TABLES = [
     'project_members',
     'project_items',
     'project_item_assignees',
+    'project_item_attachments',
+    'project_item_comments',
     'project_invitations',
     'project_join_requests',
+    'notifications',
+    'chat_rooms',
+    'chat_room_members',
+    'chat_messages',
 ];
 
 function parseProjectRef(url) {

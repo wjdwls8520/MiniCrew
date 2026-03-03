@@ -1,253 +1,261 @@
-import { supabase } from '@/lib/supabase';
-import { addProjectMembers } from '@/lib/api/projects';
+import { callBff } from '@/lib/api/client';
 import type {
     CreateProjectInvitationInput,
     CreateProjectJoinRequestInput,
     InvitationStatus,
     JoinRequestStatus,
     MemberRole,
+    ProjectMember,
+    ProjectNotification,
     ProjectInvitation,
     ProjectJoinRequest,
-    ProjectMember,
 } from '@/types/collaboration';
 
-interface ProjectMemberRow {
-    id: string;
-    project_id: string;
-    display_name: string;
-    email: string | null;
-    role: MemberRole;
-    created_at: string;
+export interface ProjectAccess {
+    projectId: string;
+    role: MemberRole | null;
+    isMember: boolean;
+    isAdmin: boolean;
 }
 
-interface ProjectInvitationRow {
-    id: string;
-    project_id: string;
-    invitee_name: string;
-    invitee_email: string;
-    role: MemberRole;
-    status: InvitationStatus;
-    message: string | null;
-    invited_by_name: string;
-    created_at: string;
-    responded_at: string | null;
+export async function listMyProjectMembershipProjectIds(viewer: {
+    userId?: string | null;
+    email?: string | null;
+}): Promise<string[]> {
+    return callBff<string[]>({
+        action: 'collab.listMyProjectMemberships',
+        payload: { viewer },
+        requireAuth: true,
+    });
 }
 
-interface ProjectJoinRequestRow {
-    id: string;
-    project_id: string;
-    requester_name: string;
-    requester_email: string;
-    message: string | null;
-    status: JoinRequestStatus;
-    reviewed_by_name: string | null;
-    created_at: string;
-    reviewed_at: string | null;
+function normalizeEmail(email?: string | null): string {
+    return email ? email.trim().toLowerCase() : '';
 }
 
-function normalizeEmail(email: string): string {
-    return email.trim().toLowerCase();
+function normalizeText(value?: string | null): string {
+    return value?.trim() ?? '';
 }
 
-function toProjectMember(row: ProjectMemberRow): ProjectMember {
-    return {
-        id: row.id,
-        projectId: row.project_id,
-        name: row.display_name,
-        email: row.email,
-        role: row.role,
-        createdAt: row.created_at,
-    };
+function getAdminUserIds(): Set<string> {
+    const raw = process.env.NEXT_PUBLIC_MINICREW_ADMIN_USER_IDS ?? '';
+    const items = raw
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+    return new Set(items);
 }
 
-function toProjectInvitation(row: ProjectInvitationRow): ProjectInvitation {
-    return {
-        id: row.id,
-        projectId: row.project_id,
-        inviteeName: row.invitee_name,
-        inviteeEmail: row.invitee_email,
-        role: row.role,
-        status: row.status,
-        message: row.message ?? '',
-        invitedByName: row.invited_by_name,
-        createdAt: row.created_at,
-        respondedAt: row.responded_at,
-    };
+function getAdminEmails(): Set<string> {
+    const raw = process.env.NEXT_PUBLIC_MINICREW_ADMIN_EMAILS ?? '';
+    const items = raw
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean);
+
+    return new Set(items);
 }
 
-function toProjectJoinRequest(row: ProjectJoinRequestRow): ProjectJoinRequest {
-    return {
-        id: row.id,
-        projectId: row.project_id,
-        requesterName: row.requester_name,
-        requesterEmail: row.requester_email,
-        message: row.message ?? '',
-        status: row.status,
-        reviewedByName: row.reviewed_by_name,
-        createdAt: row.created_at,
-        reviewedAt: row.reviewed_at,
-    };
+export function isSystemAdmin(userId?: string | null, email?: string | null): boolean {
+    const normalizedUserId = normalizeText(userId);
+    const normalizedEmail = normalizeEmail(email);
+
+    if (normalizedUserId && getAdminUserIds().has(normalizedUserId)) {
+        return true;
+    }
+
+    if (normalizedEmail && getAdminEmails().has(normalizedEmail)) {
+        return true;
+    }
+
+    return false;
+}
+
+export async function getProjectMemberRole(
+    projectId: string,
+    userId: string | null,
+    email?: string | null
+): Promise<MemberRole | null> {
+    return callBff<MemberRole | null>({
+        action: 'collab.getProjectMemberRole',
+        payload: { projectId, userId, email: email ?? null },
+    });
+}
+
+export async function isProjectMember(
+    projectId: string,
+    userId: string | null,
+    email?: string | null
+): Promise<boolean> {
+    const role = await getProjectMemberRole(projectId, userId, email);
+    return Boolean(role);
+}
+
+export async function isProjectLeader(
+    projectId: string,
+    userId: string | null,
+    email?: string | null
+): Promise<boolean> {
+    const role = await getProjectMemberRole(projectId, userId, email);
+    return role === 'leader';
+}
+
+export async function getProjectAccess(
+    projectId: string,
+    viewer: { userId?: string | null; email?: string | null }
+): Promise<ProjectAccess> {
+    return callBff<ProjectAccess>({
+        action: 'collab.getProjectAccess',
+        payload: { projectId, viewer },
+    });
+}
+
+export async function isProjectAdminOrLeader(
+    projectId: string,
+    viewer: { userId?: string | null; email?: string | null }
+): Promise<boolean> {
+    const access = await getProjectAccess(projectId, viewer);
+    return access.isAdmin || access.role === 'leader';
 }
 
 export async function listProjectMembersDetail(projectId: string): Promise<ProjectMember[]> {
-    const { data, error } = await supabase
-        .from('project_members')
-        .select('id,project_id,display_name,email,role,created_at')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: true });
-
-    if (error) {
-        throw new Error(error.message);
-    }
-
-    const rows = ((data ?? []) as unknown) as ProjectMemberRow[];
-    return rows.map(toProjectMember);
-}
-
-export async function createProjectInvitation(projectId: string, input: CreateProjectInvitationInput): Promise<ProjectInvitation> {
-    const inviteeName = input.inviteeName.trim();
-    const inviteeEmail = normalizeEmail(input.inviteeEmail);
-
-    if (!inviteeName || !inviteeEmail) {
-        throw new Error('초대할 이름과 이메일을 입력해 주세요.');
-    }
-
-    const { data, error } = await supabase
-        .from('project_invitations')
-        .insert({
-            project_id: projectId,
-            invitee_name: inviteeName,
-            invitee_email: inviteeEmail,
-            role: input.role === 'leader' ? 'leader' : 'member',
-            status: 'PENDING',
-            message: input.message?.trim() || null,
-            invited_by_name: input.invitedByName?.trim() || '관리자',
-        })
-        .select('id,project_id,invitee_name,invitee_email,role,status,message,invited_by_name,created_at,responded_at')
-        .single();
-
-    if (error || !data) {
-        throw new Error(error?.message ?? '초대 생성에 실패했습니다.');
-    }
-
-    return toProjectInvitation((data as unknown) as ProjectInvitationRow);
+    return callBff<ProjectMember[]>({
+        action: 'collab.listProjectMembersDetail',
+        payload: { projectId },
+        requireAuth: true,
+    });
 }
 
 export async function listProjectInvitations(projectId: string): Promise<ProjectInvitation[]> {
-    const { data, error } = await supabase
-        .from('project_invitations')
-        .select('id,project_id,invitee_name,invitee_email,role,status,message,invited_by_name,created_at,responded_at')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false });
-
-    if (error) {
-        throw new Error(error.message);
-    }
-
-    const rows = ((data ?? []) as unknown) as ProjectInvitationRow[];
-    return rows.map(toProjectInvitation);
+    return callBff<ProjectInvitation[]>({
+        action: 'collab.listProjectInvitations',
+        payload: { projectId },
+        requireAuth: true,
+    });
 }
 
-export async function createProjectJoinRequest(projectId: string, input: CreateProjectJoinRequestInput): Promise<ProjectJoinRequest> {
-    const requesterName = input.requesterName.trim();
-    const requesterEmail = normalizeEmail(input.requesterEmail);
+export async function listMyProjectInvitationsForUser(params: {
+    userId?: string | null;
+    email?: string | null;
+}): Promise<ProjectInvitation[]> {
+    return callBff<ProjectInvitation[]>({
+        action: 'collab.listMyProjectInvitationsForUser',
+        payload: params,
+        requireAuth: true,
+    });
+}
 
-    if (!requesterName || !requesterEmail) {
-        throw new Error('신청자 이름과 이메일을 입력해 주세요.');
-    }
+export async function createProjectInvitation(
+    projectId: string,
+    input: CreateProjectInvitationInput,
+    viewer: { userId?: string | null; email?: string | null; displayName: string }
+): Promise<ProjectInvitation> {
+    return callBff<ProjectInvitation>({
+        action: 'collab.createProjectInvitation',
+        payload: { projectId, input, viewer },
+        requireAuth: true,
+    });
+}
 
-    const { data, error } = await supabase
-        .from('project_join_requests')
-        .insert({
-            project_id: projectId,
-            requester_name: requesterName,
-            requester_email: requesterEmail,
-            message: input.message?.trim() || null,
-            status: 'PENDING',
-        })
-        .select('id,project_id,requester_name,requester_email,message,status,reviewed_by_name,created_at,reviewed_at')
-        .single();
-
-    if (error || !data) {
-        throw new Error(error?.message ?? '가입 신청 생성에 실패했습니다.');
-    }
-
-    return toProjectJoinRequest((data as unknown) as ProjectJoinRequestRow);
+export async function createProjectJoinRequest(
+    projectId: string,
+    input: CreateProjectJoinRequestInput,
+    viewer: { userId?: string | null; email?: string | null; displayName: string }
+): Promise<ProjectJoinRequest> {
+    return callBff<ProjectJoinRequest>({
+        action: 'collab.createProjectJoinRequest',
+        payload: { projectId, input, viewer },
+        requireAuth: true,
+    });
 }
 
 export async function listProjectJoinRequests(projectId: string): Promise<ProjectJoinRequest[]> {
-    const { data, error } = await supabase
-        .from('project_join_requests')
-        .select('id,project_id,requester_name,requester_email,message,status,reviewed_by_name,created_at,reviewed_at')
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false });
-
-    if (error) {
-        throw new Error(error.message);
-    }
-
-    const rows = ((data ?? []) as unknown) as ProjectJoinRequestRow[];
-    return rows.map(toProjectJoinRequest);
-}
-
-export async function reviewJoinRequest(requestId: string, decision: 'APPROVED' | 'REJECTED', reviewedByName = '관리자'): Promise<void> {
-    const { data, error } = await supabase
-        .from('project_join_requests')
-        .select('id,project_id,requester_name,requester_email,status')
-        .eq('id', requestId)
-        .single();
-
-    if (error || !data) {
-        throw new Error(error?.message ?? '가입 신청 정보를 찾지 못했습니다.');
-    }
-
-    const requestRow = (data as {
-        id: string;
-        project_id: string;
-        requester_name: string;
-        requester_email: string;
-        status: JoinRequestStatus;
+    return callBff<ProjectJoinRequest[]>({
+        action: 'collab.listProjectJoinRequests',
+        payload: { projectId },
+        requireAuth: true,
     });
-
-    if (requestRow.status !== 'PENDING') {
-        throw new Error('이미 처리된 신청입니다.');
-    }
-
-    if (decision === 'APPROVED') {
-        await addProjectMembers(requestRow.project_id, [
-            {
-                name: requestRow.requester_name,
-                email: requestRow.requester_email,
-                role: 'member',
-            },
-        ]);
-    }
-
-    const { error: updateError } = await supabase
-        .from('project_join_requests')
-        .update({
-            status: decision,
-            reviewed_by_name: reviewedByName,
-            reviewed_at: new Date().toISOString(),
-        })
-        .eq('id', requestId);
-
-    if (updateError) {
-        throw new Error(updateError.message);
-    }
 }
 
-export async function updateInvitationStatus(invitationId: string, status: Exclude<InvitationStatus, 'PENDING'>): Promise<void> {
-    const { error } = await supabase
-        .from('project_invitations')
-        .update({
-            status,
-            responded_at: new Date().toISOString(),
-        })
-        .eq('id', invitationId)
-        .eq('status', 'PENDING');
-
-    if (error) {
-        throw new Error(error.message);
-    }
+export async function respondProjectInvitation(
+    invitationId: string,
+    decision: Exclude<InvitationStatus, 'PENDING'>,
+    viewer: { userId?: string | null; email?: string | null; displayName: string }
+): Promise<ProjectInvitation> {
+    return callBff<ProjectInvitation>({
+        action: 'collab.respondProjectInvitation',
+        payload: { invitationId, decision, viewer },
+        requireAuth: true,
+    });
 }
+
+export async function reviewJoinRequest(
+    requestId: string,
+    decision: 'APPROVED' | 'REJECTED',
+    reviewedBy: { userId?: string | null; displayName: string; email?: string | null }
+): Promise<void> {
+    await callBff<null>({
+        action: 'collab.reviewJoinRequest',
+        payload: { requestId, decision, reviewedBy },
+        requireAuth: true,
+    });
+}
+
+export async function transferProjectLeader(
+    projectId: string,
+    nextLeaderMemberId: string,
+    changedBy: { userId?: string | null; displayName: string }
+): Promise<void> {
+    await callBff<null>({
+        action: 'collab.transferProjectLeader',
+        payload: { projectId, nextLeaderMemberId, changedBy },
+        requireAuth: true,
+    });
+}
+
+export async function removeProjectMember(
+    projectId: string,
+    memberId: string,
+    actor: { userId?: string | null; displayName: string }
+): Promise<void> {
+    await callBff<null>({
+        action: 'collab.removeProjectMember',
+        payload: { projectId, memberId, actor },
+        requireAuth: true,
+    });
+}
+
+export async function leaveProject(projectId: string): Promise<void> {
+    await callBff<null>({
+        action: 'collab.leaveProject',
+        payload: { projectId },
+        requireAuth: true,
+    });
+}
+
+export async function listNotifications(userId: string): Promise<ProjectNotification[]> {
+    return callBff<ProjectNotification[]>({
+        action: 'collab.listNotifications',
+        payload: { userId },
+        requireAuth: true,
+    });
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+    await callBff<null>({
+        action: 'collab.markNotificationRead',
+        payload: { notificationId },
+        requireAuth: true,
+    });
+}
+
+export async function deleteNotification(notificationId: string): Promise<void> {
+    await callBff<null>({
+        action: 'collab.deleteNotification',
+        payload: { notificationId },
+        requireAuth: true,
+    });
+}
+
+export type { JoinRequestStatus };

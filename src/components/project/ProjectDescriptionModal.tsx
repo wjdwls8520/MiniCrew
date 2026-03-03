@@ -56,7 +56,7 @@ export function ProjectDescriptionModal({ isOpen, onClose, title, description, t
             {/* Backdrop */}
             <div
                 className={clsx(
-                    "fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ease-out",
+                    "fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300 ease-out cursor-pointer",
                     isVisible ? "opacity-100" : "opacity-0"
                 )}
                 onClick={onClose}

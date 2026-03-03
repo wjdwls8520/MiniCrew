@@ -1,19 +1,29 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Star, Users, Briefcase, Calendar, Plus } from 'lucide-react';
 import { useUI } from '@/context/UIContext';
+import { useAuth } from '@/context/AuthContext';
+import { createProjectJoinRequest } from '@/lib/api/projectCollaboration';
+import { listMyProjectMembershipProjectIds } from '@/lib/api/projectCollaboration';
 import { toErrorMessage } from '@/lib/api/errors';
+import { isAnomalyBlockedError } from '@/lib/api/client';
 import type { ProjectItem } from '@/types/project';
+import { useRouter } from 'next/navigation';
+import { clsx } from 'clsx';
 
 interface ProjectCardProps {
     project: ProjectItem;
     onToggleFavorite: (project: ProjectItem) => Promise<void>;
+    onRequestJoin: (project: ProjectItem) => Promise<void>;
     isFavoriteUpdating: boolean;
+    isJoinRequesting: boolean;
+    canToggleFavorite: boolean;
+    canRequestJoin: boolean;
 }
 
-const ProjectCard = ({ project, onToggleFavorite, isFavoriteUpdating }: ProjectCardProps) => {
+const ProjectCard = ({ project, onToggleFavorite, onRequestJoin, isFavoriteUpdating, isJoinRequesting, canToggleFavorite, canRequestJoin }: ProjectCardProps) => {
     const [isHovered, setIsHovered] = useState(false);
 
     const formatDateRange = (start?: string, end?: string): React.ReactNode => {
@@ -66,13 +76,22 @@ const ProjectCard = ({ project, onToggleFavorite, isFavoriteUpdating }: ProjectC
                 </span>
                 <button
                     type="button"
-                    disabled={isFavoriteUpdating}
+                    disabled={isFavoriteUpdating || !canToggleFavorite}
                     onClick={async (e) => {
+                        if (!canToggleFavorite) {
+                            return;
+                        }
+
                         e.preventDefault();
                         e.stopPropagation();
                         await onToggleFavorite(project);
                     }}
-                    className="p-1 rounded-full hover:bg-white/70 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={clsx(
+                        'p-1 rounded-full transition-colors disabled:opacity-50',
+                        canToggleFavorite
+                            ? 'hover:bg-white/70 cursor-pointer'
+                            : 'cursor-not-allowed'
+                    )}
                     aria-label={project.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
                     title={project.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
                 >
@@ -81,6 +100,25 @@ const ProjectCard = ({ project, onToggleFavorite, isFavoriteUpdating }: ProjectC
                     />
                 </button>
             </div>
+            {canRequestJoin && (
+                <button
+                    type="button"
+                    onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        await onRequestJoin(project);
+                    }}
+                    disabled={isJoinRequesting}
+                    className={clsx(
+                        'absolute -bottom-4 -right-4 w-8 h-8 rounded-full flex items-center justify-center text-white shadow-md transition-colors border border-white cursor-pointer z-10',
+                        isJoinRequesting ? 'bg-gray-300 cursor-not-allowed' : 'bg-[#B95D69] hover:bg-[#A04C58]'
+                    )}
+                    aria-label="프로젝트 참여 신청"
+                    title="프로젝트 참여 신청"
+                >
+                    <Plus className="w-4 h-4" />
+                </button>
+            )}
 
             <h3 className="text-lg font-bold text-gray-900 mb-2 line-clamp-1">
                 {project.name}
@@ -117,7 +155,52 @@ const ProjectCard = ({ project, onToggleFavorite, isFavoriteUpdating }: ProjectC
 
 export default function DashboardPage() {
     const { openCreateProjectModal, projects, isProjectsLoading, projectsError, searchKeyword, toggleProjectFavorite } = useUI();
+    const { isAuthenticated, user, profile, displayName } = useAuth();
+    const router = useRouter();
     const [updatingFavoriteProjectId, setUpdatingFavoriteProjectId] = useState<string | null>(null);
+    const [requestingJoinProjectId, setRequestingJoinProjectId] = useState<string | null>(null);
+    const [myMembershipProjectIds, setMyMembershipProjectIds] = useState<string[]>([]);
+    const [isMembershipLoaded, setIsMembershipLoaded] = useState(false);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const loadMyMembershipProjectIds = async () => {
+            if (!isAuthenticated || !user?.id) {
+                if (isMounted) {
+                    setMyMembershipProjectIds([]);
+                    setIsMembershipLoaded(true);
+                }
+                return;
+            }
+
+            try {
+                const projectIds = await listMyProjectMembershipProjectIds({
+                    userId: user.id,
+                    email: profile?.email ?? user.email ?? '',
+                });
+                if (!isMounted) {
+                    return;
+                }
+                setMyMembershipProjectIds(Array.from(new Set(projectIds.map((projectId) => projectId.trim()).filter(Boolean))));
+            } catch (error) {
+                if (!isMounted || isAnomalyBlockedError(error)) {
+                    return;
+                }
+                setMyMembershipProjectIds([]);
+            } finally {
+                if (isMounted) {
+                    setIsMembershipLoaded(true);
+                }
+            }
+        };
+
+        void loadMyMembershipProjectIds();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isAuthenticated, user?.id, user?.email, profile?.email, projects]);
 
     const keyword = searchKeyword.trim().toLowerCase();
     const filteredProjects = projects.filter((project) => {
@@ -130,10 +213,20 @@ export default function DashboardPage() {
         );
     });
 
-    const myProjects = filteredProjects.filter((project) => project.isFavorite);
+    const myMembershipProjectIdSet = useMemo(
+        () => new Set(myMembershipProjectIds),
+        [myMembershipProjectIds]
+    );
+    const favoriteProjects = filteredProjects.filter((project) => project.isFavorite);
+    const myProjects = filteredProjects.filter((project) => myMembershipProjectIdSet.has(project.id));
     const allProjects = filteredProjects;
 
     const handleToggleFavorite = async (project: ProjectItem) => {
+        if (!isAuthenticated) {
+            alert('즐겨찾기는 로그인 후 이용 가능합니다.');
+            return;
+        }
+
         if (updatingFavoriteProjectId) {
             return;
         }
@@ -142,11 +235,80 @@ export default function DashboardPage() {
             setUpdatingFavoriteProjectId(project.id);
             await toggleProjectFavorite(project.id, !project.isFavorite);
         } catch (error) {
+            if (isAnomalyBlockedError(error)) {
+                return;
+            }
             alert(toErrorMessage(error, '즐겨찾기 상태를 변경하지 못했습니다.'));
         } finally {
             setUpdatingFavoriteProjectId(null);
         }
     };
+
+    const handleRequestJoin = async (project: ProjectItem) => {
+        if (!isAuthenticated) {
+            router.push('/login');
+            return;
+        }
+
+        if (!user) {
+            alert('로그인 정보를 확인할 수 없습니다.');
+            return;
+        }
+
+        if (requestingJoinProjectId) {
+            return;
+        }
+
+        const shouldRequest = window.confirm('해당 프로젝트에 참여 신청 하시겠습니까?');
+        if (!shouldRequest) {
+            return;
+        }
+
+        try {
+            setRequestingJoinProjectId(project.id);
+            await createProjectJoinRequest(
+                project.id,
+                {
+                    requesterName: displayName || user.email || '사용자',
+                    requesterEmail: profile?.email ?? user.email ?? '',
+                    requesterId: user.id,
+                },
+                {
+                    userId: user.id,
+                    email: profile?.email ?? user.email ?? '',
+                    displayName: displayName || user.email || '사용자',
+                }
+            );
+            alert('프로젝트 참여 신청이 접수되었습니다.');
+        } catch (error) {
+            if (isAnomalyBlockedError(error)) {
+                return;
+            }
+            alert(toErrorMessage(error, '프로젝트 참여 신청을 접수하지 못했습니다.'));
+        } finally {
+            setRequestingJoinProjectId(null);
+        }
+    };
+
+    const openCreateProject = () => {
+        if (!isAuthenticated) {
+            router.push('/login');
+            return;
+        }
+        openCreateProjectModal();
+    };
+
+    const normalizedSearch = searchKeyword.trim();
+    const hasSearchKeyword = Boolean(normalizedSearch);
+    const isProjectsLoadError = Boolean(projectsError);
+    const projectsLoadErrorMessage = `[error] ${projectsError ?? '프로젝트 목록을 불러오지 못했습니다.'}`;
+    const allProjectsViewState: 'loading' | 'error' | 'empty' | 'ready' = isProjectsLoading
+        ? 'loading'
+        : isProjectsLoadError
+            ? 'error'
+            : allProjects.length === 0
+                ? 'empty'
+                : 'ready';
 
     return (
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 relative min-h-screen">
@@ -156,7 +318,7 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-500 mt-1">오늘의 업무 현황을 한눈에 확인하세요.</p>
                 </div>
                 <button
-                    onClick={openCreateProjectModal}
+                    onClick={openCreateProject}
                     className="hidden md:inline-flex px-4 py-2 bg-[#B95D69] hover:bg-[#A04C58] text-white rounded-md text-sm font-medium transition-colors shadow-sm items-center cursor-pointer"
                 >
                     <Plus className="w-4 h-4 mr-2" />
@@ -167,26 +329,56 @@ export default function DashboardPage() {
             <section className="mb-10">
                 <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
                     <Star className="w-5 h-5 mr-2 text-yellow-400 fill-yellow-400" />
-                    내 프로젝트 (My Projects)
+                    즐겨찾기한 프로젝트
                 </h2>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
                     {isProjectsLoading && (
                         <p className="text-sm text-gray-400">프로젝트를 불러오는 중입니다...</p>
                     )}
-                    {projectsError && !isProjectsLoading && (
-                        <p className="text-sm text-red-400">{projectsError}</p>
+                    {favoriteProjects.map((project) => (
+                        <ProjectCard
+                            key={project.id}
+                            project={project}
+                            onToggleFavorite={handleToggleFavorite}
+                            onRequestJoin={handleRequestJoin}
+                            isFavoriteUpdating={updatingFavoriteProjectId === project.id}
+                            isJoinRequesting={requestingJoinProjectId === project.id}
+                            canToggleFavorite={isAuthenticated}
+                            canRequestJoin={isMembershipLoaded && !myMembershipProjectIdSet.has(project.id)}
+                        />
+                    ))}
+                    {favoriteProjects.length === 0 && !isProjectsLoading && !isProjectsLoadError && (
+                        <p className="text-sm text-gray-400">
+                            {hasSearchKeyword ? '검색 결과가 없습니다.' : '즐겨찾기한 프로젝트가 없습니다.'}
+                        </p>
+                    )}
+                </div>
+            </section>
+
+            <section className="mb-10">
+                <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                    <Users className="w-5 h-5 mr-2 text-[#B95D69]" />
+                    내 프로젝트
+                </h2>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
+                    {isProjectsLoading && (
+                        <p className="text-sm text-gray-400">프로젝트를 불러오는 중입니다...</p>
                     )}
                     {myProjects.map((project) => (
                         <ProjectCard
                             key={project.id}
                             project={project}
                             onToggleFavorite={handleToggleFavorite}
+                            onRequestJoin={handleRequestJoin}
                             isFavoriteUpdating={updatingFavoriteProjectId === project.id}
+                            isJoinRequesting={requestingJoinProjectId === project.id}
+                            canToggleFavorite={isAuthenticated}
+                            canRequestJoin={false}
                         />
                     ))}
-                    {myProjects.length === 0 && !isProjectsLoading && !projectsError && (
+                    {myProjects.length === 0 && !isProjectsLoading && !isProjectsLoadError && (
                         <p className="text-sm text-gray-400">
-                            {searchKeyword.trim() ? '검색 결과가 없습니다.' : '즐겨찾기한 프로젝트가 없습니다.'}
+                            {hasSearchKeyword ? '검색 결과가 없습니다.' : '참여 중인 프로젝트가 없습니다.'}
                         </p>
                     )}
                 </div>
@@ -198,22 +390,36 @@ export default function DashboardPage() {
                     전체 프로젝트 (All Projects)
                 </h2>
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
-                    {allProjects.map((project) => (
+                    {allProjectsViewState === 'loading' && (
+                        <p className="text-sm text-gray-400">프로젝트를 불러오는 중입니다...</p>
+                    )}
+                    {allProjectsViewState === 'error' && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-500">
+                            {projectsLoadErrorMessage}
+                        </div>
+                    )}
+                    {allProjectsViewState === 'empty' && (
+                        <p className="text-sm text-gray-400">
+                            {hasSearchKeyword ? '검색 조건에 맞는 프로젝트가 없습니다.' : '현재 프로젝트가 존재하지 않습니다.'}
+                        </p>
+                    )}
+                    {allProjectsViewState === 'ready' && allProjects.map((project) => (
                         <ProjectCard
                             key={project.id}
                             project={project}
                             onToggleFavorite={handleToggleFavorite}
+                            onRequestJoin={handleRequestJoin}
                             isFavoriteUpdating={updatingFavoriteProjectId === project.id}
+                            isJoinRequesting={requestingJoinProjectId === project.id}
+                            canToggleFavorite={isAuthenticated}
+                            canRequestJoin={isMembershipLoaded && !myMembershipProjectIdSet.has(project.id)}
                         />
                     ))}
-                    {allProjects.length === 0 && !isProjectsLoading && !projectsError && (
-                        <p className="text-sm text-gray-400">검색 조건에 맞는 프로젝트가 없습니다.</p>
-                    )}
                 </div>
             </section>
 
             <button
-                onClick={openCreateProjectModal}
+                onClick={openCreateProject}
                 className="md:hidden fixed bottom-6 right-6 w-14 h-14 bg-[#B95D69] hover:bg-[#A04C58] text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95 z-40 cursor-pointer"
                 aria-label="Create New Project"
             >

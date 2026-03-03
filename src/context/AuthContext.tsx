@@ -5,6 +5,7 @@ import type { User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { getDisplayNameFromUser, getUserProfile, upsertUserProfile } from '@/lib/api/auth';
 import type { UserProfile } from '@/types/auth';
+import { flushPendingStorageDeletions } from '@/lib/storage/imageUpload';
 
 interface AuthContextType {
     isAuthReady: boolean;
@@ -12,6 +13,7 @@ interface AuthContextType {
     profile: UserProfile | null;
     displayName: string;
     isAuthenticated: boolean;
+    isOnboarded: boolean;
     signInWithGoogle: () => Promise<void>;
     signInWithKakao: () => Promise<void>;
     signOut: () => Promise<void>;
@@ -21,6 +23,12 @@ interface AuthContextType {
         email: string;
         fullName: string;
         nickname: string;
+        phoneNumber: string;
+        avatarUrl?: string | null;
+        avatarOriginalFilename?: string | null;
+        avatarStoredFilename?: string | null;
+        avatarStoragePath?: string | null;
+        avatarSizeBytes?: number | null;
     }) => Promise<UserProfile>;
 }
 
@@ -107,6 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: string;
         fullName: string;
         nickname: string;
+        phoneNumber: string;
+        avatarUrl?: string | null;
+        avatarOriginalFilename?: string | null;
+        avatarStoredFilename?: string | null;
+        avatarStoragePath?: string | null;
+        avatarSizeBytes?: number | null;
     }) => {
         const nextProfile = await upsertUserProfile(params);
         if (user?.id === params.userId) {
@@ -116,7 +130,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [user]);
 
     useEffect(() => {
-        void syncSessionAndProfile();
+        const initTimer = window.setTimeout(() => {
+            void syncSessionAndProfile();
+        }, 0);
+
+        const cleanupTimer = window.setTimeout(() => {
+            void flushPendingStorageDeletions(30);
+        }, 1200);
 
         const {
             data: { subscription },
@@ -137,6 +157,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         return () => {
+            window.clearTimeout(initTimer);
+            window.clearTimeout(cleanupTimer);
             subscription.unsubscribe();
         };
     }, [syncSessionAndProfile]);
@@ -150,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             profile,
             displayName,
             isAuthenticated: Boolean(user),
+            isOnboarded: Boolean(profile),
             signInWithGoogle,
             signInWithKakao,
             signOut,

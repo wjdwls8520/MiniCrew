@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, MessageSquare } from 'lucide-react';
+import { Clock, MessageSquare, PencilLine, FileImage, FileText, FileArchive, File } from 'lucide-react';
 import { clsx } from 'clsx';
 import { STATUS_COLORS, STATUS_LABELS } from '@/constants/project';
 import type { Task } from '@/types/workflow';
@@ -9,7 +9,9 @@ export type { Task, TaskPriority, TaskStatus } from '@/types/workflow';
 export interface TaskCardProps {
     task: Task;
     themeColor: string;
-    onClick?: () => void;
+    onDetail?: () => void;
+    onDelete?: () => void;
+    onEdit?: () => void;
 }
 
 const PRIORITY_CONFIG = {
@@ -19,16 +21,30 @@ const PRIORITY_CONFIG = {
     LOW: { label: '낮음', color: 'text-gray-600 bg-gray-50 border-gray-100' },
 };
 
-export function TaskCard({ task, themeColor, onClick }: TaskCardProps) {
+export function TaskCard({ task, themeColor, onDetail, onDelete, onEdit }: TaskCardProps) {
+    const handleDelete = () => {
+        onDelete?.();
+    };
+
     const priorityConfig = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.NORMAL;
     const statusColor = STATUS_COLORS[task.status] || STATUS_COLORS.REQUEST;
     const statusLabel = STATUS_LABELS[task.status] || task.status;
+    const getAttachmentIcon = (mimeType?: string | null) => {
+        const mime = (mimeType ?? '').toLowerCase();
+        if (mime.startsWith('image/')) {
+            return <FileImage className="h-4 w-4 text-sky-500" />;
+        }
+        if (mime.includes('zip') || mime.includes('compressed') || mime.includes('archive')) {
+            return <FileArchive className="h-4 w-4 text-amber-500" />;
+        }
+        if (mime.startsWith('text/') || mime.includes('pdf') || mime.includes('word') || mime.includes('spreadsheet')) {
+            return <FileText className="h-4 w-4 text-gray-500" />;
+        }
+        return <File className="h-4 w-4 text-gray-500" />;
+    };
 
     return (
-        <div
-            onClick={onClick}
-            className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm transition-all cursor-pointer group relative hover:border-gray-300"
-        >
+        <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm transition-all group relative hover:border-gray-300">
             {/* Header: Author & Date */}
             <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center space-x-2">
@@ -59,6 +75,50 @@ export function TaskCard({ task, themeColor, onClick }: TaskCardProps) {
                 <p className="text-sm text-gray-500 line-clamp-2">
                     {task.content}
                 </p>
+                {task.imageUrl && (
+                    <a
+                        href={task.imageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 block overflow-hidden rounded-lg border border-gray-200"
+                    >
+                        <img
+                            src={task.imageUrl}
+                            alt={task.imageOriginalFilename || '업무 첨부 이미지'}
+                            className="max-h-64 w-full object-cover"
+                        />
+                    </a>
+                )}
+                {task.attachments.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                        {task.attachments.map((attachment) => (
+                            <a
+                                key={attachment.id || attachment.storagePath}
+                                href={attachment.fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-2 rounded-lg border border-gray-200 px-2.5 py-2 hover:bg-gray-50"
+                            >
+                                {attachment.mimeType.startsWith('image/') ? (
+                                    <span className="h-10 w-10 overflow-hidden rounded border border-gray-200">
+                                        <img
+                                            src={attachment.fileUrl}
+                                            alt={attachment.originalFilename}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex h-10 w-10 items-center justify-center rounded border border-gray-200 bg-gray-50">
+                                        {getAttachmentIcon(attachment.mimeType)}
+                                    </span>
+                                )}
+                                <span className="min-w-0 flex-1 truncate text-xs text-gray-700">
+                                    {attachment.originalFilename}
+                                </span>
+                            </a>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Meta Info: Priority & Date */}
@@ -114,6 +174,40 @@ export function TaskCard({ task, themeColor, onClick }: TaskCardProps) {
                     <span>{task.commentCount}</span>
                 </div>
             </div>
+            {(onDetail || onDelete || onEdit) && (
+                <div className="mt-3 flex gap-2 justify-end">
+                    {onDetail && (
+                        <button
+                            type="button"
+                            onClick={onDetail}
+                            className="text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-md px-2 py-1"
+                        >
+                            상세 보기
+                        </button>
+                    )}
+                    {onEdit && (
+                        <button
+                            type="button"
+                            onClick={onEdit}
+                            className="text-xs text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-md px-2 py-1"
+                        >
+                            <span className="inline-flex items-center gap-1">
+                                <PencilLine className="w-3 h-3" />
+                                수정
+                            </span>
+                        </button>
+                    )}
+                    {onDelete && (
+                        <button
+                            type="button"
+                            onClick={handleDelete}
+                            className="text-xs text-red-500 border border-red-100 hover:bg-red-50 rounded-md px-2 py-1"
+                        >
+                            삭제
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

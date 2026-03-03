@@ -12,6 +12,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
     },
+})
+
+// Sync Realtime WebSocket auth with the user's JWT.
+// The new sb_publishable_ key format requires explicit setAuth()
+// for WebSocket connections to authenticate properly.
+supabase.auth.onAuthStateChange((_event, session) => {
+    if (session?.access_token) {
+        supabase.realtime.setAuth(session.access_token)
+    } else {
+        supabase.realtime.setAuth(supabaseAnonKey)
+    }
 })

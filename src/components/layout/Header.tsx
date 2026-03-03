@@ -1,21 +1,56 @@
 'use client';
 
 import React from 'react';
-import { Search, Bell, MessageSquare, Menu, UserRound, LogIn } from 'lucide-react';
+import { Search, Bell, MessageSquare, Menu, UsersRound } from 'lucide-react';
 import { useUI } from '@/context/UIContext';
 import { useAuth } from '@/context/AuthContext';
+import { getProfileAvatarUrl } from '@/lib/profileAvatar';
 import Link from 'next/link';
 
 interface HeaderProps {
     onMenuToggle: () => void;
+    onNotificationToggle: () => void;
+    onAddressBookToggle: () => void;
     onChatToggle: () => void;
+    onProfileToggle: () => void;
+    isNotificationOpen: boolean;
+    isAddressBookOpen: boolean;
     isChatOpen: boolean;
+    isProfileOpen: boolean;
     isSidebarOpen: boolean;
+    unreadNotificationCount: number;
+    onlineMemberCount: number;
+    unreadChatCount: number;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onMenuToggle, onChatToggle, isChatOpen, isSidebarOpen }) => {
+export const Header: React.FC<HeaderProps> = ({
+    onMenuToggle,
+    onNotificationToggle,
+    onAddressBookToggle,
+    onChatToggle,
+    onProfileToggle,
+    isNotificationOpen,
+    isAddressBookOpen,
+    isChatOpen,
+    isProfileOpen,
+    isSidebarOpen,
+    unreadNotificationCount,
+    onlineMemberCount,
+    unreadChatCount,
+}) => {
     const { searchKeyword, setSearchKeyword } = useUI();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, user, profile } = useAuth();
+    const unreadText = unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount);
+    const onlineMemberText = onlineMemberCount > 99 ? '99+' : String(onlineMemberCount);
+    const unreadChatText = unreadChatCount > 99 ? '99+' : String(unreadChatCount);
+    const userMetadata = (user?.user_metadata ?? {}) as Record<string, unknown>;
+    const oauthAvatarUrl = (
+        typeof userMetadata.avatar_url === 'string' ? userMetadata.avatar_url
+            : typeof userMetadata.picture === 'string' ? userMetadata.picture
+                : typeof userMetadata.profile_image_url === 'string' ? userMetadata.profile_image_url
+                    : ''
+    ).trim();
+    const profileAvatarUrl = getProfileAvatarUrl(profile?.avatarUrl?.trim() || oauthAvatarUrl || null);
 
     return (
         <header className="h-16 border-b border-[#EED7DB] bg-[#FFF8F9] flex items-center justify-between pl-3.5 pr-4 fixed top-0 left-0 right-0 z-50">
@@ -48,24 +83,68 @@ export const Header: React.FC<HeaderProps> = ({ onMenuToggle, onChatToggle, isCh
 
             {/* Right: Icons */}
             <div className="flex items-center space-x-4">
-                <button className="p-2 hover:bg-[#FCEBF0] rounded-full relative transition-colors">
-                    <Bell className="w-5 h-5 text-gray-600" />
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-                </button>
-                <button
-                    onClick={onChatToggle}
-                    className={`p-2 rounded-full transition-colors ${isChatOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
-                >
-                    <MessageSquare className="w-5 h-5" />
-                </button>
-                <Link
-                    href={isAuthenticated ? '/dashboard' : '/login'}
-                    className="w-8 h-8 bg-[#FFE4E8] rounded-full flex items-center justify-center text-xs font-medium text-[#B95D69] cursor-pointer"
-                    aria-label={isAuthenticated ? '로그인된 사용자 아이콘' : '로그인 페이지로 이동'}
-                    title={isAuthenticated ? '프로필' : '로그인'}
-                >
-                    {isAuthenticated ? <UserRound className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-                </Link>
+                {!isAuthenticated ? (
+                    <Link
+                        href="/login"
+                        className="px-3 h-9 rounded-lg border border-[#EED7DB] bg-white text-[#B95D69] font-semibold text-sm flex items-center hover:bg-[#FFF8F9] cursor-pointer"
+                    >
+                        로그인
+                    </Link>
+                ) : (
+                    <>
+                    <button
+                        type="button"
+                        onClick={onNotificationToggle}
+                        className={`p-2 rounded-full relative transition-colors cursor-pointer ${isNotificationOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
+                    >
+                        <Bell className="w-5 h-5" />
+                        {unreadNotificationCount > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
+                                {unreadText}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onAddressBookToggle}
+                        className={`p-2 rounded-full relative transition-colors cursor-pointer ${isAddressBookOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
+                        aria-label="주소록"
+                    >
+                        <UsersRound className="w-5 h-5" />
+                        {onlineMemberCount > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
+                                {onlineMemberText}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onChatToggle}
+                        className={`p-2 rounded-full relative transition-colors cursor-pointer ${isChatOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
+                        aria-label="메시지"
+                    >
+                        <MessageSquare className="w-5 h-5" />
+                        {unreadChatCount > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
+                                {unreadChatText}
+                            </span>
+                        )}
+                    </button>
+                        <button
+                            type="button"
+                            onClick={onProfileToggle}
+                            className={`h-8 w-8 overflow-hidden rounded-full border transition-all cursor-pointer ${isProfileOpen ? 'border-[#D28A99] ring-2 ring-[#F5CBD4]' : 'border-[#EED7DB] hover:ring-2 hover:ring-[#FCEBF0]'}`}
+                            title="내 프로필"
+                            aria-label="내 프로필"
+                        >
+                            <span
+                                className="block h-full w-full bg-cover bg-center bg-no-repeat"
+                                style={{ backgroundImage: `url("${profileAvatarUrl}")` }}
+                                aria-hidden="true"
+                            />
+                        </button>
+                    </>
+                )}
             </div>
         </header>
     );

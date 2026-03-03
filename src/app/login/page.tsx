@@ -11,6 +11,7 @@ export default function LoginPage() {
     const {
         isAuthReady,
         isAuthenticated,
+        isOnboarded,
         signInWithGoogle,
         signInWithKakao,
     } = useAuth();
@@ -18,10 +19,12 @@ export default function LoginPage() {
     const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
-        if (isAuthReady && isAuthenticated) {
-            router.replace('/dashboard');
+        if (!isAuthReady || !isAuthenticated) {
+            return;
         }
-    }, [isAuthReady, isAuthenticated, router]);
+
+        router.replace(isOnboarded ? '/dashboard' : '/auth/callback');
+    }, [isAuthReady, isAuthenticated, isOnboarded, router]);
 
     const handleLogin = async (provider: 'google' | 'kakao') => {
         setErrorMessage('');
