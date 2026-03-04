@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { toErrorMessage } from '@/lib/api/errors';
 import { isAnomalyBlockedError } from '@/lib/api/client';
 import type { CreateProjectInput, ProjectCreatorIdentity, ProjectItem } from '@/types/project';
+import { usePathname } from 'next/navigation';
 
 interface UIContextType {
     isCreateProjectModalOpen: boolean;
@@ -30,7 +31,13 @@ export function UIProvider({ children }: { children: ReactNode }) {
     const [projectsError, setProjectsError] = useState<string | null>(null);
     const [isCreateProjectModalOpen, setIsCreateProjectModalOpen] = useState(false);
     const [searchKeyword, setSearchKeyword] = useState('');
+    const pathname = usePathname();
     const refreshProjectsDebounceTimerRef = useRef<number | null>(null);
+
+    // Clear search keyword when navigating between pages
+    useEffect(() => {
+        setSearchKeyword('');
+    }, [pathname]);
 
     const membershipView = useMemo(() => ({
         userId: user?.id,

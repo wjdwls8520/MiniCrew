@@ -225,7 +225,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     const resolvedParams = use(params);
     const { id } = resolvedParams;
     const router = useRouter();
-    const { projects, refreshProjects, toggleProjectFavorite } = useUI();
+    const { projects, refreshProjects, toggleProjectFavorite, searchKeyword, setSearchKeyword } = useUI();
     const { user, displayName, isAuthenticated, profile } = useAuth();
 
     const projectFromList = useMemo(
@@ -781,17 +781,28 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }, [isAuthenticated, project?.id, refreshBoard]);
 
     const filteredTasks = useMemo(
-        () => tasks.filter((task) => {
-            const isStatusMatched = taskStatusFilter === 'ALL' || task.status === taskStatusFilter;
-            const isCategoryMatched = activeCategoryTab === 'ALL' || task.category === activeCategoryTab;
-            return isStatusMatched && isCategoryMatched;
-        }),
-        [tasks, taskStatusFilter, activeCategoryTab]
+        () => {
+            const keyword = searchKeyword.trim().toLowerCase();
+            return tasks.filter((task) => {
+                const isStatusMatched = taskStatusFilter === 'ALL' || task.status === taskStatusFilter;
+                const isCategoryMatched = activeCategoryTab === 'ALL' || task.category === activeCategoryTab;
+                const isSearchMatched = !keyword || task.title.toLowerCase().includes(keyword) || task.content.toLowerCase().includes(keyword);
+                return isStatusMatched && isCategoryMatched && isSearchMatched;
+            });
+        },
+        [tasks, taskStatusFilter, activeCategoryTab, searchKeyword]
     );
 
     const filteredPosts = useMemo(
-        () => posts.filter((post) => activeCategoryTab === 'ALL' || post.category === activeCategoryTab),
-        [posts, activeCategoryTab]
+        () => {
+            const keyword = searchKeyword.trim().toLowerCase();
+            return posts.filter((post) => {
+                const isCategoryMatched = activeCategoryTab === 'ALL' || post.category === activeCategoryTab;
+                const isSearchMatched = !keyword || post.title.toLowerCase().includes(keyword) || post.content.toLowerCase().includes(keyword);
+                return isCategoryMatched && isSearchMatched;
+            });
+        },
+        [posts, activeCategoryTab, searchKeyword]
     );
     const selectedTaskForDetail = useMemo(
         () => (boardDetailState?.type === 'TASK'
@@ -1914,7 +1925,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 />
 
                 {activeBoardTab === 'TASK' && (
-                    <div className="pb-2 pl-1">
+                    <div className="pb-2">
                         <select
                             value={taskStatusFilter}
                             onChange={(e) => setTaskStatusFilter(e.target.value)}
