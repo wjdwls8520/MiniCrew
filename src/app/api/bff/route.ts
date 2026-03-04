@@ -892,7 +892,8 @@ async function runAction(args: {
         // Fetch user's favorites
         const favoriteProjectIds = new Set<string>();
         if (user) {
-            const { data: favData } = await supabase
+            const svc = createServiceRoleClient();
+            const { data: favData } = await svc
                 .from('project_favorites')
                 .select('project_id')
                 .eq('user_id', user.id);
@@ -931,7 +932,8 @@ async function runAction(args: {
         // Check if current user has favorited this project
         let isFav = false;
         if (user) {
-            const { data: favRow } = await supabase
+            const svc = createServiceRoleClient();
+            const { data: favRow } = await svc
                 .from('project_favorites')
                 .select('id')
                 .eq('user_id', user.id)
@@ -1296,9 +1298,11 @@ async function runAction(args: {
         const projectId = normalizeText(payload.projectId);
         const isFavorite = Boolean(payload.isFavorite);
 
+        const svc = createServiceRoleClient();
+
         if (isFavorite) {
             // Add favorite
-            const { error: insertError } = await supabase
+            const { error: insertError } = await svc
                 .from('project_favorites')
                 .upsert({ user_id: signedUser.id, project_id: projectId }, { onConflict: 'user_id,project_id' });
             if (insertError) {
@@ -1306,7 +1310,7 @@ async function runAction(args: {
             }
         } else {
             // Remove favorite
-            const { error: deleteError } = await supabase
+            const { error: deleteError } = await svc
                 .from('project_favorites')
                 .delete()
                 .eq('user_id', signedUser.id)
