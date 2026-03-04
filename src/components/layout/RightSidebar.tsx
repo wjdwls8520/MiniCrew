@@ -1478,7 +1478,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     return (
         <aside
             className={clsx(
-                'fixed right-0 top-16 bottom-0 z-50 w-80 border-l border-gray-200 bg-white shadow-lg transition-transform duration-300',
+                'fixed right-0 top-16 bottom-0 z-80 w-80 border-l border-gray-200 bg-white shadow-lg transition-transform duration-300',
                 isOpen ? 'translate-x-0' : 'translate-x-full'
             )}
             aria-hidden={!isOpen}
