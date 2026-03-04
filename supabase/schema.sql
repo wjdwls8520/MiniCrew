@@ -86,6 +86,20 @@ create table public.project_favorites (
     unique (user_id, project_id)
 );
 
+alter table public.project_favorites enable row level security;
+
+create policy p_project_favorites_select
+on public.project_favorites for select to authenticated
+using (user_id = auth.uid());
+
+create policy p_project_favorites_insert
+on public.project_favorites for insert to authenticated
+with check (user_id = auth.uid());
+
+create policy p_project_favorites_delete
+on public.project_favorites for delete to authenticated
+using (user_id = auth.uid());
+
 create table public.user_profiles (
     id uuid primary key default gen_random_uuid(),
     user_id uuid not null unique references auth.users(id) on delete cascade,
