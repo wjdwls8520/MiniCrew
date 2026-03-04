@@ -79,7 +79,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, onSe
             {/* Mobile Backdrop */}
             <div
                 className={clsx(
-                    "fixed inset-0 bg-black/20 z-40 md:hidden transition-opacity duration-300 cursor-pointer",
+                    "fixed inset-0 bg-black/20 z-30 md:hidden transition-opacity duration-300 cursor-pointer",
                     isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
                 )}
                 onClick={onToggle}
@@ -88,7 +88,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, onSe
 
             <div
                 className={clsx(
-                    "fixed left-0 top-16 bottom-0 bg-[#FFF8F9] border-r border-[#EED7DB] transition-all duration-300 z-50 flex flex-col",
+                    "fixed left-0 top-16 bottom-0 bg-[#FFF8F9] border-r border-[#EED7DB] transition-all duration-300 z-30 flex flex-col",
                     // Mobile: full sidebar width if open, hidden if closed (off-canvas)
                     // Desktop: width 64 if open, width 16 if closed
                     isOpen ? "translate-x-0 w-64" : "-translate-x-full w-64 md:translate-x-0 md:w-[calc(var(--spacing)*18)]"
@@ -192,7 +192,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ isOpen, onToggle, onSe
                 </div>
 
                 {/* Footer: Settings & Logout */}
-            <div className="p-2 border-t border-[#EED7DB] mt-auto">
+                <div className="p-2 border-t border-[#EED7DB] mt-auto">
                     <button
                         className="flex items-center rounded-md hover:bg-[#FCEBF0] text-[#5E4246] h-10 transition-colors overflow-hidden w-full"
                         onClick={handleSettings}

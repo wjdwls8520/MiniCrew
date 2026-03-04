@@ -2453,7 +2453,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     onClick={() => void handleLeaveProject()}
                     disabled={isLeavingProject}
                     className={clsx(
-                        'fixed bottom-6 h-12 px-4 rounded-full border text-sm font-semibold shadow-lg z-50 transition-colors cursor-pointer',
+                        'fixed bottom-6 h-12 px-4 rounded-full border text-sm font-semibold shadow-lg z-40 transition-colors cursor-pointer',
                         canManageProject ? 'right-[10.5rem]' : 'right-24',
                         isLeavingProject
                             ? 'border-gray-200 bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -2488,7 +2488,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             {canCreateBoard ? (
                 <button
                     onClick={openCreateBoardItem}
-                    className="fixed bottom-6 right-6 w-14 h-14 text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95 z-50 bg-gray-900 hover:bg-gray-800 cursor-pointer"
+                    className="fixed bottom-6 right-6 w-14 h-14 text-white rounded-full shadow-2xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95 z-40 bg-gray-900 hover:bg-gray-800 cursor-pointer"
                     title="새 글/업무 작성"
                 >
                     <PenTool className="w-6 h-6" />
@@ -2499,7 +2499,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     onClick={() => void handleJoinRequestFloating()}
                     disabled={isActionSubmitting}
                     className={clsx(
-                        'fixed bottom-6 right-6 w-14 h-14 text-white rounded-full shadow-2xl flex items-center justify-center transition-transform z-50 cursor-pointer',
+                        'fixed bottom-6 right-6 w-14 h-14 text-white rounded-full shadow-2xl flex items-center justify-center transition-transform z-40 cursor-pointer',
                         isActionSubmitting ? 'bg-gray-300 cursor-not-allowed' : 'bg-[#B95D69] hover:bg-[#A64D5A] hover:scale-105 active:scale-95'
                     )}
                     title="프로젝트 참여 신청"
