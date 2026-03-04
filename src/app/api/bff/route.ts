@@ -12,7 +12,6 @@ const PROJECT_SELECT = [
     'status',
     'start_date',
     'end_date',
-    'is_favorite',
     'category',
     'theme_color',
     'tags',
@@ -211,7 +210,7 @@ async function ensureOnboardedUser(
     }
 }
 
-function toProjectItem(row: Record<string, unknown>) {
+function toProjectItem(row: Record<string, unknown>, isFavorite = false) {
     return {
         id: String(row.id ?? ''),
         name: String(row.name ?? ''),
@@ -219,7 +218,7 @@ function toProjectItem(row: Record<string, unknown>) {
         members: typeof row.members_count === 'number' ? row.members_count : 0,
         startDate: String(row.start_date ?? ''),
         endDate: String(row.end_date ?? ''),
-        isFavorite: Boolean(row.is_favorite),
+        isFavorite,
         category: String(row.category ?? '미분류'),
         themeColor: String(row.theme_color ?? '#B95D69'),
         tags: Array.isArray(row.tags) ? row.tags.map((tag) => String(tag)) : [],
@@ -890,7 +889,23 @@ async function runAction(args: {
             throw new Error(error.message);
         }
 
-        return ((data ?? []) as unknown as Record<string, unknown>[]).map(toProjectItem);
+        // Fetch user's favorites
+        const favoriteProjectIds = new Set<string>();
+        if (user) {
+            const { data: favData } = await supabase
+                .from('project_favorites')
+                .select('project_id')
+                .eq('user_id', user.id);
+            if (favData) {
+                for (const fav of favData) {
+                    favoriteProjectIds.add(String((fav as Record<string, unknown>).project_id ?? ''));
+                }
+            }
+        }
+
+        return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) =>
+            toProjectItem(row, favoriteProjectIds.has(String(row.id ?? '')))
+        );
     }
 
     if (action === 'projects.getById' || action === 'projects.getByIdForViewer') {
@@ -913,11 +928,23 @@ async function runAction(args: {
             return null;
         }
 
-        return toProjectItem(data as unknown as Record<string, unknown>);
+        // Check if current user has favorited this project
+        let isFav = false;
+        if (user) {
+            const { data: favRow } = await supabase
+                .from('project_favorites')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('project_id', projectId)
+                .maybeSingle();
+            isFav = Boolean(favRow);
+        }
+
+        return toProjectItem(data as unknown as Record<string, unknown>, isFav);
     }
 
     if (action === 'projects.addMembers') {
-        requireAuthUser(user);
+        const signedUser = requireAuthUser(user);
         const projectId = normalizeText(payload.projectId);
         const members = Array.isArray(payload.members) ? payload.members : [];
         if (!projectId || members.length === 0) {
@@ -943,6 +970,32 @@ async function runAction(args: {
             throw new Error(error.message);
         }
         await refreshProjectMembersCount(supabase, projectId);
+
+        // Send notifications to newly added members
+        const newMemberUserIds = rows
+            .map((row) => row.user_id)
+            .filter((uid): uid is string => Boolean(uid) && uid !== signedUser.id);
+
+        if (newMemberUserIds.length > 0) {
+            // Fetch project name for the notification message
+            const { data: projectRow } = await supabase
+                .from('projects')
+                .select('name')
+                .eq('id', projectId)
+                .maybeSingle();
+            const projectName = projectRow ? String((projectRow as Record<string, unknown>).name ?? '') : '';
+
+            await createNotificationsForUsers(supabase, {
+                recipientUserIds: newMemberUserIds,
+                actorUserId: signedUser.id,
+                projectId,
+                type: 'MEMBER_ADDED',
+                message: projectName
+                    ? `[${projectName}] 프로젝트에 구성원으로 추가되었습니다.`
+                    : '프로젝트에 구성원으로 추가되었습니다.',
+            });
+        }
+
         return null;
     }
 
@@ -975,7 +1028,6 @@ async function runAction(args: {
             members_count: 0,
             start_date: startDate,
             end_date: endDate,
-            is_favorite: false,
             category: normalizeText(input.category) || '미분류',
             theme_color: normalizeText(input.themeColor) || '#B95D69',
             tags,
@@ -1229,22 +1281,42 @@ async function runAction(args: {
     }
 
     if (action === 'projects.updateFavorite') {
-        requireAuthUser(user);
+        const signedUser = requireAuthUser(user);
         const projectId = normalizeText(payload.projectId);
         const isFavorite = Boolean(payload.isFavorite);
 
+        if (isFavorite) {
+            // Add favorite
+            const { error: insertError } = await supabase
+                .from('project_favorites')
+                .upsert({ user_id: signedUser.id, project_id: projectId }, { onConflict: 'user_id,project_id' });
+            if (insertError) {
+                throw new Error(insertError.message);
+            }
+        } else {
+            // Remove favorite
+            const { error: deleteError } = await supabase
+                .from('project_favorites')
+                .delete()
+                .eq('user_id', signedUser.id)
+                .eq('project_id', projectId);
+            if (deleteError) {
+                throw new Error(deleteError.message);
+            }
+        }
+
+        // Return updated project
         const { data, error } = await supabase
             .from('projects')
-            .update({ is_favorite: isFavorite })
-            .eq('id', projectId)
             .select(PROJECT_SELECT)
+            .eq('id', projectId)
             .single();
 
         if (error || !data) {
             throw new Error(error?.message ?? '즐겨찾기 상태 변경에 실패했습니다.');
         }
 
-        return toProjectItem(data as unknown as Record<string, unknown>);
+        return toProjectItem(data as unknown as Record<string, unknown>, isFavorite);
     }
 
     if (action === 'board.listMembers') {

@@ -292,6 +292,9 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     const [transferMemberId, setTransferMemberId] = useState('');
     const [isDeletingProject, setIsDeletingProject] = useState(false);
     const [isLeavingProject, setIsLeavingProject] = useState(false);
+    const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
     const [projectTagInput, setProjectTagInput] = useState('');
     const [projectForm, setProjectForm] = useState({
         name: '',
@@ -1642,13 +1645,17 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             return;
         }
 
-        const shouldLeave = confirm('정말 해당 프로젝트에서 나가시겠습니까?');
-        if (!shouldLeave) {
+        setShowLeaveConfirm(true);
+    };
+
+    const confirmLeaveProject = async () => {
+        if (!project || !user || isLeavingProject) {
             return;
         }
 
         try {
             setIsLeavingProject(true);
+            setShowLeaveConfirm(false);
             await leaveProject(project.id);
             await refreshProjects();
             alert('프로젝트에서 나갔습니다.');
@@ -1792,18 +1799,22 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             return;
         }
 
-        const confirmMessage = '정말 삭제 하시겠습니까? 삭제시 모든 정보는 사라집니다.';
-        if (!confirm(confirmMessage)) {
+        setDeleteConfirmInput('');
+        setShowDeleteConfirm(true);
+    };
+
+    const confirmDeleteProject = async () => {
+        if (!project || !user || isDeletingProject) {
             return;
         }
 
-        const confirmationText = prompt('"삭제하기"를 입력하면 프로젝트가 삭제됩니다.');
-        if (confirmationText?.trim() !== '삭제하기') {
+        if (deleteConfirmInput.trim() !== '삭제하기') {
             return;
         }
 
         try {
             setIsDeletingProject(true);
+            setShowDeleteConfirm(false);
             await deleteProject(project.id, { userId: user.id, email: viewerEmail });
             await refreshProjects();
             router.replace('/dashboard');
@@ -3072,6 +3083,69 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                 mode={editingBoardItem ? 'EDIT' : 'CREATE'}
                 editItem={editingBoardItem}
             />
+
+            {/* Leave Confirmation Modal */}
+            {showLeaveConfirm && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setShowLeaveConfirm(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">프로젝트 나가기</h3>
+                        <p className="text-sm text-gray-600 mb-6">정말 해당 프로젝트에서 나가시겠습니까?</p>
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowLeaveConfirm(false)}
+                                className="flex-1 h-10 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+                            >
+                                취소
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void confirmLeaveProject()}
+                                disabled={isLeavingProject}
+                                className="flex-1 h-10 rounded-lg bg-red-500 text-sm font-medium text-white hover:bg-red-600 cursor-pointer disabled:opacity-50"
+                            >
+                                {isLeavingProject ? '처리 중...' : '나가기'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40" onClick={() => setShowDeleteConfirm(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 mx-4 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">프로젝트 삭제</h3>
+                        <p className="text-sm text-gray-600 mb-1">정말 삭제하시겠습니까? 삭제 시 모든 정보는 사라집니다.</p>
+                        <p className="text-sm text-gray-600 mb-4">&quot;삭제하기&quot;를 입력하면 프로젝트가 삭제됩니다.</p>
+                        <input
+                            type="text"
+                            value={deleteConfirmInput}
+                            onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                            placeholder="삭제하기"
+                            className="w-full h-10 px-3 border border-gray-200 rounded-lg text-sm text-gray-900 mb-4"
+                            autoFocus
+                        />
+                        <div className="flex gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="flex-1 h-10 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+                            >
+                                취소
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void confirmDeleteProject()}
+                                disabled={isDeletingProject || deleteConfirmInput.trim() !== '삭제하기'}
+                                className="flex-1 h-10 rounded-lg bg-red-500 text-sm font-medium text-white hover:bg-red-600 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isDeletingProject ? '처리 중...' : '삭제'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

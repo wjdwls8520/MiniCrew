@@ -67,7 +67,6 @@ create table public.projects (
     status text not null default 'REQUEST' check (status in ('REQUEST', 'PROGRESS', 'FEEDBACK', 'REVIEW', 'DONE', 'HOLD', 'ISSUE')),
     start_date date,
     end_date date,
-    is_favorite boolean not null default false,
     category text not null default '미분류',
     theme_color text not null default '#B95D69' check (theme_color ~* '^#(?:[0-9a-f]{3}){1,2}$'),
     tags text[] not null default '{}',
@@ -76,6 +75,15 @@ create table public.projects (
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     constraint projects_date_range check (start_date is null or end_date is null or start_date <= end_date)
+);
+
+-- Per-user favorites (replaces shared is_favorite column)
+create table public.project_favorites (
+    id uuid primary key default gen_random_uuid(),
+    user_id uuid not null references auth.users(id) on delete cascade,
+    project_id uuid not null references public.projects(id) on delete cascade,
+    created_at timestamptz not null default now(),
+    unique (user_id, project_id)
 );
 
 create table public.user_profiles (
