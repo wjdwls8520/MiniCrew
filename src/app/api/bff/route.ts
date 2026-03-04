@@ -2749,7 +2749,54 @@ async function runAction(args: {
             uniqueById.set(room.id, room);
         });
 
-        return Array.from(uniqueById.values());
+        const allRooms = Array.from(uniqueById.values());
+
+        // For direct rooms, compute per-viewer title (show the OTHER member's name)
+        const directRoomIds = allRooms.filter((r) => r.roomType === 'direct').map((r) => r.id);
+        if (directRoomIds.length > 0) {
+            const { data: memberData } = await supabase
+                .from('chat_room_members')
+                .select('room_id,user_id')
+                .in('room_id', directRoomIds);
+
+            if (memberData) {
+                // Map room_id -> other user's user_id
+                const otherUserByRoom = new Map<string, string>();
+                for (const row of memberData as Array<{ room_id: string; user_id: string }>) {
+                    if (row.user_id !== userId) {
+                        otherUserByRoom.set(row.room_id, row.user_id);
+                    }
+                }
+
+                // Fetch display names for other users
+                const otherUserIds = Array.from(new Set(otherUserByRoom.values()));
+                if (otherUserIds.length > 0) {
+                    const { data: profileData } = await supabase
+                        .from('user_profiles')
+                        .select('user_id,nickname')
+                        .in('user_id', otherUserIds);
+
+                    const nameByUserId = new Map<string, string>();
+                    if (profileData) {
+                        for (const profile of profileData as Array<{ user_id: string; nickname: string }>) {
+                            nameByUserId.set(profile.user_id, profile.nickname);
+                        }
+                    }
+
+                    // Override title for each direct room
+                    for (const room of allRooms) {
+                        if (room.roomType !== 'direct') continue;
+                        const otherUserId = otherUserByRoom.get(room.id);
+                        if (otherUserId) {
+                            const otherName = nameByUserId.get(otherUserId) || '사용자';
+                            (room as { title: string }).title = `${otherName}님과의 채팅`;
+                        }
+                    }
+                }
+            }
+        }
+
+        return allRooms;
     }
 
     if (action === 'chat.getUnreadCountSince') {

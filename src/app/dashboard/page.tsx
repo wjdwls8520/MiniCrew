@@ -13,6 +13,16 @@ import type { ProjectItem } from '@/types/project';
 import { useRouter } from 'next/navigation';
 import { clsx } from 'clsx';
 
+const STATUS_LABELS: Record<string, string> = {
+    REQUEST: '요청',
+    PROGRESS: '진행',
+    FEEDBACK: '피드백',
+    REVIEW: '검수완료',
+    DONE: '완료',
+    HOLD: '보류',
+    ISSUE: '이슈',
+};
+
 interface ProjectCardProps {
     project: ProjectItem;
     onToggleFavorite: (project: ProjectItem) => Promise<void>;
@@ -73,6 +83,15 @@ const ProjectCard = ({ project, onToggleFavorite, onRequestJoin, isFavoriteUpdat
                     }}
                 >
                     {project.category}
+                </span>
+                <span
+                    className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                    style={{
+                        backgroundColor: `${project.themeColor}20`,
+                        color: project.themeColor,
+                    }}
+                >
+                    {STATUS_LABELS[project.status] ?? '요청'}
                 </span>
                 <button
                     type="button"

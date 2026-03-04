@@ -238,6 +238,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     const [isProjectAdmin, setIsProjectAdmin] = useState(false);
     const [activeBoardTab, setActiveBoardTab] = useState<BoardTabType>('TASK');
     const [activeStatusTab, setActiveStatusTab] = useState('REQUEST');
+    const [taskStatusFilter, setTaskStatusFilter] = useState('ALL');
     const [activeCategoryTab, setActiveCategoryTab] = useState('ALL');
 
     const [tasks, setTasks] = useState<Task[]>([]);
@@ -329,18 +330,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     const canManageProject = isLeader || isProjectAdmin;
     const myPendingInvitation = myInvitations.find((invitation) => invitation.status === 'PENDING');
     const hasPendingMyInvitation = Boolean(myPendingInvitation);
-    const statusCountMap = useMemo(() => {
-        const counts = new Map<string, number>();
-        for (const tab of STATUS_TABS) {
-            counts.set(tab.id, 0);
-        }
-
-        tasks.forEach((task) => {
-            counts.set(task.status, (counts.get(task.status) ?? 0) + 1);
-        });
-
-        return counts;
-    }, [tasks]);
+    const [isChangingProjectStatus, setIsChangingProjectStatus] = useState(false);
     const projectDepartmentTabs = useMemo(() => {
         const uniqueTags = Array.from(
             new Set(
@@ -792,11 +782,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
 
     const filteredTasks = useMemo(
         () => tasks.filter((task) => {
-            const isStatusMatched = task.status === activeStatusTab;
+            const isStatusMatched = taskStatusFilter === 'ALL' || task.status === taskStatusFilter;
             const isCategoryMatched = activeCategoryTab === 'ALL' || task.category === activeCategoryTab;
             return isStatusMatched && isCategoryMatched;
         }),
-        [tasks, activeStatusTab, activeCategoryTab]
+        [tasks, taskStatusFilter, activeCategoryTab]
     );
 
     const filteredPosts = useMemo(
@@ -852,7 +842,7 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
     }, [boardDetailState, posts, tasks]);
 
     const boardHasError = Boolean(boardError);
-    const taskStatusAndCategoryFiltered = activeStatusTab !== 'REQUEST' || activeCategoryTab !== 'ALL';
+    const taskStatusAndCategoryFiltered = taskStatusFilter !== 'ALL' || activeCategoryTab !== 'ALL';
     const postCategoryFiltered = activeCategoryTab !== 'ALL';
     const taskEmptyMessage = taskStatusAndCategoryFiltered ? '선택한 상태/카테고리에 맞는 업무가 없습니다.' : '현재 업무가 존재하지 않습니다.';
     const postEmptyMessage = postCategoryFiltered ? '선택한 말머리에 맞는 글이 없습니다.' : '현재 글이 존재하지 않습니다.';
@@ -1866,20 +1856,36 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             <div className="mb-7">
                 <SectionTitle title="프로젝트 진행사항" />
                 <TabSwiper
-                    tabs={STATUS_TABS.map((tab) => {
-                        const count = statusCountMap.get(tab.id) ?? 0;
-                        return {
-                            id: tab.id,
-                            label: count > 0 ? `${tab.label} ${count}` : tab.label,
-                        };
-                    })}
-                    activeTabId={activeStatusTab}
-                    onTabClick={setActiveStatusTab}
+                    tabs={STATUS_TABS}
+                    activeTabId={project.status ?? 'REQUEST'}
+                    onTabClick={async (tabId) => {
+                        if (!canManageProject || isChangingProjectStatus) return;
+                        if (tabId === (project.status ?? 'REQUEST')) return;
+                        try {
+                            setIsChangingProjectStatus(true);
+                            const updated = await updateProject(
+                                project.id,
+                                { status: tabId as TaskStatus },
+                                { userId: user!.id, email: viewerEmail }
+                            );
+                            setProject(updated);
+                            await refreshProjects();
+                        } catch (error) {
+                            if (!isAnomalyBlockedError(error)) {
+                                alert(toErrorMessage(error, '프로젝트 상태 변경에 실패했습니다.'));
+                            }
+                        } finally {
+                            setIsChangingProjectStatus(false);
+                        }
+                    }}
                     themeColor={project.themeColor}
                     variant="STATUS"
                     colorMap={STATUS_COLORS}
                     className="pb-1"
                 />
+                {!canManageProject && (
+                    <p className="text-xs text-gray-400 mt-1 ml-1">프로젝트 상태 변경은 팀장만 가능합니다.</p>
+                )}
             </div>
 
             <div className="bg-white">
@@ -1906,6 +1912,21 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
                     variant="CATEGORY"
                     className="py-2"
                 />
+
+                {activeBoardTab === 'TASK' && (
+                    <div className="pb-2 pl-1">
+                        <select
+                            value={taskStatusFilter}
+                            onChange={(e) => setTaskStatusFilter(e.target.value)}
+                            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#B95D69] cursor-pointer"
+                        >
+                            <option value="ALL">전체 상태</option>
+                            {STATUS_TABS.map((tab) => (
+                                <option key={tab.id} value={tab.id}>{tab.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
             {showProjectManagementPanels && canManageProject && (

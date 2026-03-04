@@ -6,6 +6,7 @@ import { useUI } from '@/context/UIContext';
 import { useAuth } from '@/context/AuthContext';
 import { getProfileAvatarUrl } from '@/lib/profileAvatar';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 interface HeaderProps {
     onMenuToggle: () => void;
@@ -40,6 +41,9 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
     const { searchKeyword, setSearchKeyword } = useUI();
     const { isAuthenticated, user, profile } = useAuth();
+    const pathname = usePathname();
+    const isProjectDetailPage = pathname.startsWith('/project/');
+    const searchPlaceholder = isProjectDetailPage ? '업무/글 검색...' : '프로젝트 검색...';
     const unreadText = unreadNotificationCount > 99 ? '99+' : String(unreadNotificationCount);
     const onlineMemberText = onlineMemberCount > 99 ? '99+' : String(onlineMemberCount);
     const unreadChatText = unreadChatCount > 99 ? '99+' : String(unreadChatCount);
@@ -75,7 +79,7 @@ export const Header: React.FC<HeaderProps> = ({
                         type="text"
                         value={searchKeyword}
                         onChange={(e) => setSearchKeyword(e.target.value)}
-                        placeholder="업무나 프로젝트 검색..."
+                        placeholder={searchPlaceholder}
                         className="w-full pl-10 pr-4 py-2 bg-white rounded-md focus:outline-none focus:ring-2 focus:ring-[#B95D69] text-sm border border-[#EED7DB] text-gray-900 placeholder-gray-400"
                     />
                 </div>
@@ -92,44 +96,44 @@ export const Header: React.FC<HeaderProps> = ({
                     </Link>
                 ) : (
                     <>
-                    <button
-                        type="button"
-                        onClick={onNotificationToggle}
-                        className={`p-2 rounded-full relative transition-colors cursor-pointer ${isNotificationOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
-                    >
-                        <Bell className="w-5 h-5" />
-                        {unreadNotificationCount > 0 && (
-                            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
-                                {unreadText}
-                            </span>
-                        )}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onAddressBookToggle}
-                        className={`p-2 rounded-full relative transition-colors cursor-pointer ${isAddressBookOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
-                        aria-label="주소록"
-                    >
-                        <UsersRound className="w-5 h-5" />
-                        {onlineMemberCount > 0 && (
-                            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
-                                {onlineMemberText}
-                            </span>
-                        )}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onChatToggle}
-                        className={`p-2 rounded-full relative transition-colors cursor-pointer ${isChatOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
-                        aria-label="메시지"
-                    >
-                        <MessageSquare className="w-5 h-5" />
-                        {unreadChatCount > 0 && (
-                            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
-                                {unreadChatText}
-                            </span>
-                        )}
-                    </button>
+                        <button
+                            type="button"
+                            onClick={onNotificationToggle}
+                            className={`p-2 rounded-full relative transition-colors cursor-pointer ${isNotificationOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
+                        >
+                            <Bell className="w-5 h-5" />
+                            {unreadNotificationCount > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
+                                    {unreadText}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onAddressBookToggle}
+                            className={`p-2 rounded-full relative transition-colors cursor-pointer ${isAddressBookOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
+                            aria-label="주소록"
+                        >
+                            <UsersRound className="w-5 h-5" />
+                            {onlineMemberCount > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-emerald-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
+                                    {onlineMemberText}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onChatToggle}
+                            className={`p-2 rounded-full relative transition-colors cursor-pointer ${isChatOpen ? 'bg-[#FFF0F3] text-[#B95D69]' : 'hover:bg-[#FCEBF0] text-gray-600'}`}
+                            aria-label="메시지"
+                        >
+                            <MessageSquare className="w-5 h-5" />
+                            {unreadChatCount > 0 && (
+                                <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[10px] leading-4 text-center border border-white font-semibold">
+                                    {unreadChatText}
+                                </span>
+                            )}
+                        </button>
                         <button
                             type="button"
                             onClick={onProfileToggle}
