@@ -338,6 +338,16 @@ export function CreateProjectModal() {
             return;
         }
 
+        if (!formData.name.trim()) {
+            alert('프로젝트 이름을 입력해 주세요.');
+            return;
+        }
+
+        if (!formData.description.trim()) {
+            alert('프로젝트 설명을 입력해 주세요.');
+            return;
+        }
+
         const payload = {
             name: formData.name.trim(),
             description: formData.description.trim(),
@@ -443,10 +453,11 @@ export function CreateProjectModal() {
                         <div className="space-y-3">
                             <label className="block text-sm font-semibold text-[#5E4246] flex items-center">
                                 <AlignLeft className="w-4 h-4 mr-2" style={{ color: formData.themeColor }} />
-                                프로젝트 요약
+                                프로젝트 요약 <span className="text-red-500 ml-1">*</span>
                             </label>
                             <textarea
                                 rows={4}
+                                required
                                 className="w-full px-4 py-3 bg-[#FFF8F9] border border-[#EED7DB] rounded-lg focus:ring-2 focus:outline-none text-gray-900 placeholder:text-gray-400"
                                 style={getRingColorStyle(formData.themeColor)}
                                 placeholder="이 프로젝트의 목적과 내용을 간단히 적어주세요."

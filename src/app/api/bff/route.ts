@@ -1022,9 +1022,14 @@ async function runAction(args: {
             ? Array.from(new Set(input.tags.map((tag) => normalizeText(tag)).filter(Boolean)))
             : [];
 
+        const description = normalizeText(input.description);
+        if (!description) {
+            throw new Error('프로젝트 설명을 입력해 주세요.');
+        }
+
         const insertPayload = {
             name,
-            description: normalizeOptionalText(input.description),
+            description,
             members_count: 0,
             start_date: startDate,
             end_date: endDate,
@@ -1181,7 +1186,11 @@ async function runAction(args: {
             nextPayload.name = name;
         }
         if (typeof updates.description === 'string') {
-            nextPayload.description = normalizeOptionalText(updates.description);
+            const desc = normalizeText(updates.description);
+            if (!desc) {
+                throw new Error('프로젝트 설명은 필수입니다.');
+            }
+            nextPayload.description = desc;
         }
         if (typeof updates.category === 'string') {
             nextPayload.category = normalizeText(updates.category) || '미분류';
@@ -1264,7 +1273,9 @@ async function runAction(args: {
             throw new Error('프로젝트 삭제는 관리자 또는 팀장만 가능합니다.');
         }
 
-        const { data, error } = await supabase
+        // Use service role client to bypass RLS (BFF already validates permissions above)
+        const serviceClient = createServiceRoleClient();
+        const { data, error } = await serviceClient
             .from('projects')
             .delete()
             .eq('id', projectId)

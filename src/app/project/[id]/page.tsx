@@ -1752,6 +1752,11 @@ export default function ProjectPage({ params }: { params: Promise<{ id: string }
             return;
         }
 
+        if (!nextDescription) {
+            alert('프로젝트 설명은 필수입니다.');
+            return;
+        }
+
         if (!nextThemeColor || !/^#(?:[0-9a-fA-F]{3}){1,2}$/.test(nextThemeColor)) {
             alert('컬러 코드는 #000000 형식이어야 합니다.');
             return;

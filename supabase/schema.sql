@@ -62,7 +62,7 @@ $$;
 create table public.projects (
     id uuid primary key default gen_random_uuid(),
     name text not null check (char_length(trim(name)) between 1 and 120),
-    description text,
+    description text not null check (char_length(trim(description)) >= 1),
     members_count integer not null default 0 check (members_count >= 0),
     status text not null default 'REQUEST' check (status in ('REQUEST', 'PROGRESS', 'FEEDBACK', 'REVIEW', 'DONE', 'HOLD', 'ISSUE')),
     start_date date,
@@ -831,7 +831,7 @@ create policy p_projects_delete
 on public.projects
 for delete
 to authenticated
-using (public.is_system_admin(auth.uid()));
+using (public.is_system_admin(auth.uid()) or public.can_manage_project(id));
 
 -- user_profiles
 create policy p_user_profiles_select
